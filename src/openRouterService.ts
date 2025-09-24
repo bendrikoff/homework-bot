@@ -146,6 +146,40 @@ export class OpenRouterService {
     return await this.sendMessage(messages);
   }
 
+  async sendMessageWithImageBuffer(
+    userMessage: string, 
+    base64Image: string, 
+    mimeType: string,
+    systemPrompt?: string
+  ): Promise<string> {
+    const messages: OpenRouterMessage[] = [];
+    
+    if (systemPrompt) {
+      messages.push({
+        role: 'system',
+        content: systemPrompt
+      });
+    }
+    
+    messages.push({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: userMessage
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:${mimeType};base64,${base64Image}`
+          }
+        }
+      ]
+    });
+
+    return await this.sendMessage(messages);
+  }
+
   private getMimeType(filePath: string): string {
     const ext = filePath.toLowerCase().split('.').pop();
     switch (ext) {

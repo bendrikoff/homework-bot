@@ -34,11 +34,7 @@ const openRouterService = new OpenRouterService(
   process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free'
 );
 
-// Создаем папку для временных изображений
-const tempImageDir = path.join(__dirname, '../temp/images');
-if (!fs.existsSync(tempImageDir)) {
-  fs.mkdirSync(tempImageDir, { recursive: true });
-}
+// Папка для временных изображений больше не нужна - отправляем напрямую в AI
 
 // Обработчик команды /start
 bot.start((ctx: Context) => {
@@ -255,10 +251,8 @@ bot.on('photo', async (ctx: Context) => {
     const response = await fetch(fileLink);
     const imageBuffer = await response.arrayBuffer();
     
-    // Сохраняем изображение во временную папку
-    const filename = `image_${Date.now()}_${Math.random().toString(36).slice(2, 9)}.jpg`;
-    const imagePath = path.join(tempImageDir, filename);
-    fs.writeFileSync(imagePath, Buffer.from(imageBuffer));
+    // Конвертируем изображение в base64 напрямую
+    const base64Image = Buffer.from(imageBuffer).toString('base64');
     
     // Системный промпт для анализа изображений
     const systemPrompt = `Ты полезный AI-ассистент для помощи с домашними заданиями. 
@@ -276,10 +270,11 @@ bot.on('photo', async (ctx: Context) => {
 
 Будь дружелюбным и полезным. Объясняй сложные концепции простым языком.`;
 
-    // Получаем ответ от AI с анализом изображения
-    const aiResponse = await openRouterService.sendMessageWithImage(
+    // Получаем ответ от AI с анализом изображения напрямую
+    const aiResponse = await openRouterService.sendMessageWithImageBuffer(
       'Проанализируй это изображение и помоги с задачей',
-      imagePath,
+      base64Image,
+      'image/jpeg',
       systemPrompt
     );
     
@@ -299,9 +294,8 @@ bot.on('photo', async (ctx: Context) => {
       caption: '🤖 Анализ изображения от AI',
     });
 
-    // Очищаем временные файлы
+    // Очищаем временный файл ответа
     latexRenderer.cleanup(responseImagePath);
-    fs.unlinkSync(imagePath);
     
   } catch (error) {
     console.error('Ошибка при обработке изображения:', error);
