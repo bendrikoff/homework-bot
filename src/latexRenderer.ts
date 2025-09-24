@@ -2,6 +2,8 @@ import katex from 'katex';
 import htmlToImage from 'node-html-to-image';
 import * as fs from 'fs';
 import * as path from 'path';
+import { marked } from 'marked';
+import hljs from 'highlight.js';
 
 export interface LatexRenderOptions {
   fontSize?: number;
@@ -21,6 +23,167 @@ export class LatexRenderer {
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
     }
+    
+    // Настройка marked для работы с LaTeX и подсветки синтаксиса
+    marked.setOptions({
+      breaks: true, // Поддержка переносов строк
+      gfm: true, // GitHub Flavored Markdown
+    });
+  }
+
+  // ⬇️ НОВОЕ: рендер Markdown + LaTeX в изображение
+  async renderMarkdownWithLatexToPng(
+    markdownText: string,
+    options: LatexRenderOptions = {}
+  ): Promise<string> {
+    const {
+      fontSize = 18,
+      color = 'black',
+      backgroundColor = 'white',
+      padding = 20,
+      lineHeight = 1.4,
+      maxWidth = 900,
+      textAlign = 'left',
+    } = options;
+
+    // Сначала обрабатываем LaTeX формулы, затем Markdown
+    const contentWithLatex = this.buildInlineHtmlFromText(markdownText);
+    let htmlContent = await marked.parse(contentWithLatex);
+    
+    // Добавляем подсветку синтаксиса для блоков кода
+    htmlContent = htmlContent.replace(/<pre><code class="language-(\w+)">([\s\S]*?)<\/code><\/pre>/g, (match: string, lang: string, code: string) => {
+      try {
+        if (hljs.getLanguage(lang)) {
+          const highlighted = hljs.highlight(code, { language: lang }).value;
+          return `<pre><code class="language-${lang} hljs">${highlighted}</code></pre>`;
+        }
+      } catch (err) {
+        console.warn('Ошибка подсветки синтаксиса:', err);
+      }
+      return match;
+    });
+
+    const filename = `markdown_latex_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 9)}.png`;
+    const filepath = path.join(this.tempDir, filename);
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <style>
+    html, body { margin:0; padding:0; }
+    body {
+      background: ${backgroundColor};
+      color: ${color};
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: ${fontSize}px;
+      line-height: ${lineHeight};
+      padding: ${padding}px;
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-start;
+      min-height: 100vh;
+      width: 100vw;
+      box-sizing: border-box;
+    }
+    .wrap {
+      max-width: ${maxWidth}px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      text-align: ${textAlign};
+    }
+    
+    /* Markdown стили */
+    h1, h2, h3, h4, h5, h6 {
+      margin: 1.5em 0 0.5em 0;
+      font-weight: bold;
+      line-height: 1.2;
+    }
+    h1 { font-size: 1.8em; border-bottom: 2px solid #eee; padding-bottom: 0.3em; }
+    h2 { font-size: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.2em; }
+    h3 { font-size: 1.3em; }
+    h4 { font-size: 1.1em; }
+    h5 { font-size: 1em; }
+    h6 { font-size: 0.9em; color: #666; }
+    
+    p { margin: 1em 0; }
+    
+    ul, ol { margin: 1em 0; padding-left: 2em; }
+    li { margin: 0.5em 0; }
+    
+    blockquote {
+      margin: 1em 0;
+      padding: 0.5em 1em;
+      border-left: 4px solid #ddd;
+      background: #f9f9f9;
+      font-style: italic;
+    }
+    
+    code {
+      background: #f4f4f4;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+      font-size: 0.9em;
+    }
+    
+    pre {
+      background: #f8f8f8;
+      padding: 1em;
+      border-radius: 5px;
+      overflow-x: auto;
+      margin: 1em 0;
+    }
+    
+    pre code {
+      background: none;
+      padding: 0;
+    }
+    
+    table {
+      border-collapse: collapse;
+      margin: 1em 0;
+      width: 100%;
+    }
+    
+    th, td {
+      border: 1px solid #ddd;
+      padding: 0.5em;
+      text-align: left;
+    }
+    
+    th {
+      background: #f5f5f5;
+      font-weight: bold;
+    }
+    
+    strong, b { font-weight: bold; }
+    em, i { font-style: italic; }
+    
+    /* LaTeX стили */
+    .katex { font-size: ${fontSize}px !important; }
+    .katex-display { margin: 0.5em 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">${htmlContent}</div>
+</body>
+</html>`;
+
+    await htmlToImage({
+      html,
+      output: filepath,
+      type: 'png',
+      puppeteerArgs: {
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      },
+    });
+
+    return filepath;
   }
 
   // ⬇️ НОВОЕ: рендер цельного текста с инлайновыми формулами
