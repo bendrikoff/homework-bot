@@ -40,8 +40,8 @@ export class LatexRenderer {
       fontSize = 18,
       color = 'black',
       backgroundColor = 'white',
-      padding = 20,
-      lineHeight = 1.4,
+      padding = 15,
+      lineHeight = 1.3,
       maxWidth = 900,
       textAlign = 'left',
     } = options;
@@ -99,25 +99,25 @@ export class LatexRenderer {
     
     /* Markdown стили */
     h1, h2, h3, h4, h5, h6 {
-      margin: 1.5em 0 0.5em 0;
+      margin: 0.5em 0 0.2em 0;
       font-weight: bold;
       line-height: 1.2;
     }
-    h1 { font-size: 1.8em; border-bottom: 2px solid #eee; padding-bottom: 0.3em; }
-    h2 { font-size: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.2em; }
+    h1 { font-size: 1.8em; border-bottom: 2px solid #eee; padding-bottom: 0.2em; }
+    h2 { font-size: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.1em; }
     h3 { font-size: 1.3em; }
     h4 { font-size: 1.1em; }
     h5 { font-size: 1em; }
     h6 { font-size: 0.9em; color: #666; }
     
-    p { margin: 1em 0; }
+    p { margin: 0.3em 0; }
     
-    ul, ol { margin: 1em 0; padding-left: 2em; }
-    li { margin: 0.5em 0; }
+    ul, ol { margin: 0.3em 0; padding-left: 1.5em; }
+    li { margin: 0.2em 0; }
     
     blockquote {
-      margin: 1em 0;
-      padding: 0.5em 1em;
+      margin: 0.5em 0;
+      padding: 0.3em 0.8em;
       border-left: 4px solid #ddd;
       background: #f9f9f9;
       font-style: italic;
@@ -125,7 +125,7 @@ export class LatexRenderer {
     
     code {
       background: #f4f4f4;
-      padding: 0.2em 0.4em;
+      padding: 0.1em 0.3em;
       border-radius: 3px;
       font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
       font-size: 0.9em;
@@ -133,10 +133,10 @@ export class LatexRenderer {
     
     pre {
       background: #f8f8f8;
-      padding: 1em;
+      padding: 0.5em;
       border-radius: 5px;
       overflow-x: auto;
-      margin: 1em 0;
+      margin: 0.5em 0;
     }
     
     pre code {
@@ -146,7 +146,7 @@ export class LatexRenderer {
     
     table {
       border-collapse: collapse;
-      margin: 1em 0;
+      margin: 0.5em 0;
       width: 100%;
     }
     
@@ -166,7 +166,7 @@ export class LatexRenderer {
     
     /* LaTeX стили */
     .katex { font-size: ${fontSize}px !important; }
-    .katex-display { margin: 0.5em 0; }
+    .katex-display { margin: 0.2em 0; }
   </style>
 </head>
 <body>

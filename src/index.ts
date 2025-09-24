@@ -300,6 +300,9 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
 // Обработчик кнопки "Объяснить решение"
 bot.action(/^explain_/, async (ctx: Context) => {
   try {
+    // Сразу отвечаем на callback query, чтобы избежать timeout
+    await ctx.answerCbQuery('🤖 Генерирую объяснение...');
+    
     // Показываем индикатор "печатает"
     await ctx.sendChatAction('typing');
     
@@ -377,12 +380,9 @@ bot.action(/^explain_/, async (ctx: Context) => {
     // Очищаем сохраненные данные
     delete (global as any).explainData[callbackData];
     
-    // Отвечаем на callback query
-    await ctx.answerCbQuery('✅ Объяснение готово!');
-    
   } catch (error) {
     console.error('Ошибка при объяснении:', error);
-    await ctx.answerCbQuery('❌ Ошибка при объяснении');
+    await ctx.reply('❌ Произошла ошибка при генерации объяснения');
   }
 });
 
