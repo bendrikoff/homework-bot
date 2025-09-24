@@ -1,8 +1,16 @@
 import axios, { AxiosResponse } from 'axios';
+import FormData from 'form-data';
+import * as fs from 'fs';
 
 export interface OpenRouterMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | Array<{
+    type: 'text' | 'image_url';
+    text?: string;
+    image_url?: {
+      url: string;
+    };
+  }>;
 }
 
 export interface OpenRouterResponse {
@@ -98,6 +106,61 @@ export class OpenRouterService {
     });
 
     return await this.sendMessage(messages);
+  }
+
+  async sendMessageWithImage(
+    userMessage: string, 
+    imagePath: string, 
+    systemPrompt?: string
+  ): Promise<string> {
+    const messages: OpenRouterMessage[] = [];
+    
+    if (systemPrompt) {
+      messages.push({
+        role: 'system',
+        content: systemPrompt
+      });
+    }
+    
+    // Читаем изображение и конвертируем в base64
+    const imageBuffer = fs.readFileSync(imagePath);
+    const base64Image = imageBuffer.toString('base64');
+    const mimeType = this.getMimeType(imagePath);
+    
+    messages.push({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: userMessage
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:${mimeType};base64,${base64Image}`
+          }
+        }
+      ]
+    });
+
+    return await this.sendMessage(messages);
+  }
+
+  private getMimeType(filePath: string): string {
+    const ext = filePath.toLowerCase().split('.').pop();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'image/jpeg';
+    }
   }
 
   // Метод для получения доступных моделей (опционально)
