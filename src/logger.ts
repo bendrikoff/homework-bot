@@ -27,7 +27,8 @@ export class Logger {
 
   constructor(logLevel: LogLevel = LogLevel.INFO, logDir: string = 'logs') {
     this.logLevel = logLevel;
-    this.logDir = path.join(__dirname, '..', logDir);
+    // Используем переменную окружения LOG_DIR если установлена, иначе относительный путь
+    this.logDir = process.env.LOG_DIR ? process.env.LOG_DIR : path.join(__dirname, '..', logDir);
     this.logFile = path.join(this.logDir, `bot_${this.getDateString()}.log`);
     
     // Создаем директорию для логов если её нет
@@ -199,10 +200,10 @@ export class Logger {
 }
 
 // Создаем глобальный экземпляр логгера
-export const logger = new Logger(
-  process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : LogLevel.INFO,
-  process.env.LOG_DIR || 'logs'
-);
+const defaultLogLevel = process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : LogLevel.INFO;
+const defaultLogDir = process.env.LOG_DIR || 'logs';
+
+export const logger = new Logger(defaultLogLevel, defaultLogDir);
 
 
 

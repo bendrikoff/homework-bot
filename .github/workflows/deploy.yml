@@ -137,7 +137,7 @@ jobs:
           
           # Исправляем права доступа к папкам
           sudo chown -R 1001:1001 ./temp ./logs || echo "Не удалось изменить права через sudo"
-          chmod -R 755 ./temp ./logs
+          chmod -R 777 ./temp ./logs
           
           # Проверяем права
           ls -la temp/ logs/
