@@ -1,111 +1,161 @@
-name: 🚀 Деплой Homework Bot (Вход по паролю)
+name: CI/CD and Deploy
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [main, master]
 
 jobs:
-  build-and-deploy:
+  ci-cd:
     runs-on: ubuntu-latest
     
     steps:
-    - name: 📥 Checkout
+    - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: 🔧 Setup Node.js
+    - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
         
-    - name: 📦 Install dependencies
+    - name: Install dependencies
       run: npm ci
       
-    - name: 🔨 Build
+    - name: Build application
       run: npm run build
       
-    - name: 📦 Create deployment archive
-      run: |
-        tar -czf homework-bot-deploy.tar.gz \
-          dist/ \
-          package*.json \
-          ecosystem.config.js \
-          docker-compose.direct.yml \
-          Dockerfile \
-          DEPLOY_OPTIONS.md \
-          deploy.sh \
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: homework-bot-build
+        path: |
+          dist/
+          package*.json
+          ecosystem.config.js
+          Dockerfile
           env.example
-        echo "📦 Создан архив Docker развертывания: $(ls -lh homework-bot-deploy.tar.gz)"
+          docker-compose.direct.yml
+        retention-days: 1
         
-    - name: 📤 Upload archive to server
+  deploy:
+    runs-on: ubuntu-latest
+    needs: ci-cd
+    if: success()
+    
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: homework-bot-build
+        path: ./artifacts
+        
+    - name: Extract artifacts
+      run: |
+        echo "📦 Проверяем содержимое артефактов..."
+        ls -la
+        echo "📦 Содержимое папки artifacts:"
+        ls -la artifacts/
+        echo "📦 Рекурсивно смотрим структуру artifacts:"
+        find artifacts/ -type f -o -type d || echo "Файлы не найдены"
+        
+    - name: Deploy artifacts to server
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
-        port: ${{ secrets.SERVER_PORT || 22 }}
-        key_path: ""
-        key: ""
-        source: "homework-bot-deploy.tar.gz"
+        source: "artifacts/"
         target: "/opt/homework-bot/"
-        strip_components: 0
-        timeout: 30s
-       
-    - name: 🖥️ Deploy with Docker
-      uses: appleboy/ssh-action@v1.0.0
+        
+    - name: Build and start on server
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
-        port: ${{ secrets.SERVER_PORT || 22 }}
-        key: ""
-        script_timeout: 300s
-        command_timeout: 60s
         script: |
+          # Переходим в директорию проекта
           cd /opt/homework-bot
           
-          echo "🔧 Проверяем Docker..."
-          if ! command -v docker &> /dev/null; then
-            echo "📦 Устанавливаем Docker..."
-            curl -fsSL https://get.docker.com | sh
-            sudo systemctl enable docker
-            sudo systemctl start docker
+          echo "📋 Содержимое директории /opt/homework-bot:"
+          ls -la
+          
+          # Создаем необходимые директории
+          mkdir -p temp logs
+          
+          # Копируем файлы из артефактов
+          echo "📋 Содержимое папки artifacts:"
+          ls -la artifacts/
+          
+          # Копируем файлы артефактов в корень (кроме .env если он уже существует)
+          if [ -f .env ]; then
+            echo "✅ Файл .env уже существует, не перезаписываем"
+            cp -r artifacts/* . && echo "Файлы скопированы из artifacts/" || echo "Ошибка копирования файлов"
+          else
+            cp -r artifacts/* .
+            cp env.example .env
+            echo "📝 Создан файл .env из примера. Отредактируйте его!"
           fi
           
-          if ! command -v docker-compose &> /dev/null; then
-            echo "📦 Устанавливаем Docker Compose..."
-            sudo apt-get install -y docker-compose
-          fi
+          # Перезаписываем docker-compose.yml для локальной сборки homework-bot
+          cat > docker-compose.yml << 'EOF'
+          version: '3.8'
           
-          echo "🛑 Останавливаем текущий контейнер..."
+          services:
+            homework-bot:
+              build: .
+              container_name: homework-bot-container
+              restart: unless-stopped
+              environment:
+                - NODE_ENV=production
+                - BOT_TOKEN=${BOT_TOKEN}
+                - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+                - OPENROUTER_MODEL=${OPENROUTER_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
+                - LOG_LEVEL=${LOG_LEVEL:-1}
+                - LOG_DIR=/app/logs
+              volumes:
+                - ./temp:/app/temp
+                - ./logs:/app/logs
+              networks:
+                - homework-bot-network
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+          
+          networks:
+            homework-bot-network:
+              driver: bridge
+          EOF
+          
+          echo "📋 Проверяем созданные файлы:"
+          ls -la Dockerfile docker-compose.yml || echo "Файлы не созданы"
+          echo "📋 Проверяем файлы собранного проекта:"
+          ls -la dist/ || echo "Папка dist не найдена"
+          ls -la package*.json || echo "package.json не найден"
+          
+          # Исправляем права доступа к папкам
+          sudo chown -R 1001:1001 ./temp ./logs || echo "Не удалось изменить права через sudo"
+          chmod -R 755 ./temp ./logs
+          
+          # Проверяем права
+          ls -la temp/ logs/
+          
+          # Если папка temp пустая, создаем файл с правильными правами
+          touch temp/test.file && rm temp/test.file || echo "Не удалось создать тестовый файл"
+          
+          # Останавливаем текущий контейнер
           docker-compose down || true
           
-          echo "📦 Извлекаем новый код..."
-          if [ -f homework-bot-deploy.tar.gz ]; then
-            tar -xzf homework-bot-deploy.tar.gz
-            rm homework-bot-deploy.tar.gz
-          else
-            echo "❌ Архив не найден!"
-            exit 1
-          fi
+          # Собираем и запускаем контейнер
+          docker-compose up --build -d
           
-          echo "📁 Настраиваем окружение..."
-          if [ ! -f .env ]; then
-            cp env.example .env
-            echo "⚠️ Создан .env файл - заполните токены!"
-          fi
-          
-          echo "🔨 Пересобираем Docker образ..."
-          cp docker-compose.direct.yml docker-compose.yml
-          docker-compose build
-          
-          echo "🚀 Запускаем контейнер..."
-          docker-compose up -d
-          
-          echo "🧹 Очищаем старые образы..."
+          # Очищаем старые образы
           docker image prune -f
           
-          echo "✅ Развертывание завершено!"
-          echo "📊 Статус контейнера:"
+          # Показываем статус
           docker-compose ps
+          
+          # Показываем логи
+          docker-compose logs --tail=20
