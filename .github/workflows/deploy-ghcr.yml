@@ -1,0 +1,139 @@
+name: 🐳 Деплой Homework Bot (GHCR)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: 📦 Install dependencies
+      run: npm ci
+       
+    - name: 🔨 Build
+      run: npm run build
+       
+    - name: 🔐 Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+         
+    - name: 🏗️ Build Docker image
+      run: |
+        docker build -t ghcr.io/${{ github.repository }}/homework-bot:latest .
+         
+    - name: 🚀 Push Docker image
+      run: |
+        docker push ghcr.io/${{ github.repository }}/homework-bot:latest
+         
+    - name: 🖥️ Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          cd /opt/homework-bot
+          
+          echo "🔧 Проверяем Docker..."
+          if ! command -v docker &> /dev/null; then
+            echo "📦 Устанавливаем Docker..."
+            curl -fsSL https://get.docker.com | sh
+            sudo systemctl enable docker
+            sudo systemctl start docker
+          fi
+          
+          if ! command -v docker-compose &> /dev/null; then
+            echo "📦 Устанавливаем Docker Compose..."
+            sudo apt-get install -y docker-compose
+          fi
+          
+          echo "📁 Создаем директории..."
+          sudo mkdir -p {temp,logs}
+          
+          echo "📋 Обновляем docker-compose.prod.yml..."
+          sed -i "s|YOUR_DOCKER_USERNAME/homework-bot|ghcr.io/${{ github.repository }}/homework-bot|g" docker-compose.prod.yml || true
+          
+          echo "🔄 Копируем конфигурацию..."
+          cp docker-compose.prod.yml docker-compose.yml || echo "docker-compose.prod.yml не найден, создаем базовый..."
+          
+          # Создаем базовый docker-compose.yml если prod файла нет
+          if [ ! -f docker-compose.yml ]; then
+            cat > docker-compose.yml << 'EOF'
+          version: '3.8'
+          services:
+            homework-bot:
+              image: ghcr.io/REPLACE_REPO/homework-bot:latest
+              container_name: homework-bot-container
+              restart: unless-stopped
+              environment:
+                - NODE_ENV=production
+                - BOT_TOKEN=${BOT_TOKEN}
+                - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+                - OPENROUTER_MODEL=${OPENROUTER_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
+                - LOG_LEVEL=${LOG_LEVEL:-1}
+                - LOG_DIR=/app/logs
+              volumes:
+                - ./temp:/app/temp
+                - ./logs:/app/logs
+              networks:
+                - homework-bot-network
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+          networks:
+            homework-bot-network:
+              driver: bridge
+          EOF
+          fi
+          
+          # Обновляем образ в файле
+          sed -i "s|REPLACE_REPO|${{ github.repository }}|g" docker-compose.yml
+          sed -i "s|ghcr.io/REPLACE_REPO/homework-bot|ghcr.io/${{ github.repository }}/homework-bot|g" docker-compose.yml
+          
+          echo "📁 Создаем .env файл..."
+          if [ ! -f .env ]; then
+            cat > .env << EOF
+          BOT_TOKEN=your_bot_token_here
+          OPENROUTER_API_KEY=your_openrouter_api_key_here
+          OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
+          LOG_LEVEL=1
+          LOG_DIR=/app/logs
+          EOF
+            echo "⚠️ Создан .env файл - заполните токены!"
+          fi
+          
+          echo "🔐 Авторизуемся в GHCR..."
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          
+          echo "🛑 Останавливаем старый контейнер..."
+          docker-compose down || true
+          
+          echo "📦 Загружаем новый образ..."
+          docker-compose pull
+          
+          echo "🚀 Запускаем новый контейнер..."
+          docker-compose up -d
+          
+          echo "🧹 Очищаем старые образы..."
+          docker image prune -f
+          
+          echo "✅ Развертывание завершено!"
+          echo "📊 Статус контейнера:"
+          docker-compose ps

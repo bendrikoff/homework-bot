@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
     
     steps:
@@ -21,26 +21,30 @@ jobs:
         
     - name: 📦 Install dependencies
       run: npm ci
-      
+       
     - name: 🔨 Build
       run: npm run build
-      
-    - name: 🔐 Login to GitHub Container Registry
-      uses: docker/login-action@v3
+       
+    - name: 📦 Create deployment package
+      run: |
+        tar -czf homework-bot.tar.gz \
+          dist/ \
+          package*.json \
+          ecosystem.config.js \
+          env.example
+        echo "📦 Создан архив: $(ls -lh homework-bot.tar.gz)"
+        
+    - name: 📤 Upload to server
+      uses: appleboy/scp-action@v0.1.7
       with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        source: "homework-bot.tar.gz"
+        target: "/opt/homework-bot/"
+        strip_components: 0
         
-    - name: 🏗️ Build Docker image
-      run: |
-        docker build -t ghcr.io/${{ github.repository }}/homework-bot:latest .
-        
-    - name: 🚀 Push Docker image
-      run: |
-        docker push ghcr.io/${{ github.repository }}/homework-bot:latest
-        
-    - name: 🖥️ Deploy to server
+    - name: 🚀 Deploy and start
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -49,22 +53,44 @@ jobs:
         script: |
           cd /opt/homework-bot
           
-          # Обновляем docker-compose.prod.yml с правильным образом
-          sed -i "s|YOUR_DOCKER_USERNAME/homework-bot|ghcr.io/${{ github.repository }}/homework-bot|g" docker-compose.prod.yml
+          echo "🔧 Проверяем зависимости системы..."
           
-          # Копируем prod файл
-          cp docker-compose.prod.yml docker-compose.yml
+          # Устанавливаем Node.js если не установлен
+          if ! command -v node &> /dev/null; then
+            echo "📦 Устанавливаем Node.js..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+          fi
           
-          # Авторизуемся в GHCR
-          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          # Устанавливаем PM2 если не установлен
+          if ! command -v pm2 &> /dev/null; then
+            echo "📦 Устанавливаем PM2..."
+            sudo npm install -g pm2
+          fi
           
-          # Перезапускаем контейнер
-          docker-compose down || true
-          docker-compose pull
-          docker-compose up -d
+          echo "🛑 Останавливаем старый процесс..."
+          pm2 stop homework-bot || true
+          pm2 delete homework-bot || true
           
-          # Очищаем старые образы
-          docker image prune -f
+          echo "📦 Извлекаем новый код..."
+          if [ -f homework-bot.tar.gz ]; then
+            tar -xzf homework-bot.tar.gz
+            rm homework-bot.tar.gz
+          else
+            echo "❌ Архив не найден!"
+            exit 1
+          fi
           
-          # Показываем статус
-          docker-compose ps
+          echo "📁 Настраиваем окружение..."
+          if [ ! -f .env ]; then
+            cp env.example .env
+            echo "⚠️ Создан .env файл - заполните токены!"
+          fi
+          
+          echo "🚀 Запускаем приложение..."
+          npm ci --production
+          pm2 start ecosystem.config.js --env production
+          pm2 save
+          
+          echo "✅ Развертывание завершено!"
+          pm2 status

@@ -27,87 +27,79 @@ jobs:
       
     - name: 📦 Create deployment archive
       run: |
-        tar -czf homework-bot.tar.gz \
-          -C . \
+        tar -czf homework-bot-simple.tar.gz \
           dist/ \
           package*.json \
           ecosystem.config.js \
           DEPLOY_OPTIONS.md \
-          deploy.sh
-      
-    - name: 🖥️ Deploy to server
+          deploy.sh \
+          env.example
+        echo "📦 Создан архив простого развертывания: $(ls -lh homework-bot-simple.tar.gz)"
+        
+    - name: 📤 Upload archive to server
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        source: "homework-bot-simple.tar.gz"
+        target: "/opt/homework-bot/"
+        strip_components: 0
+       
+    - name: 🖥️ Deploy with PM2
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
+          cd /opt/homework-bot
+          
+          echo "🔧 Проверяем зависимости..."
+          
           # Проверяем наличие Node.js
           if ! command -v node &> /dev/null; then
             echo "📦 Устанавливаем Node.js..."
             curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-            apt-get install -y nodejs
+            sudo apt-get install -y nodejs
           fi
           
           # Проверяем наличие PM2
           if ! command -v pm2 &> /dev/null; then
             echo "📦 Устанавливаем PM2..."
-            npm install -g pm2
+            sudo npm install -g pm2
           fi
           
-          # Создаем директорию если не существует
-          mkdir -p /opt/homework-bot
-          cd /opt/homework-bot
-          
-          # Создаем .env файл если не существует
-          if [ ! -f .env ]; then
-            cat > .env << EOF
-            BOT_TOKEN=your_bot_token_here
-            OPENROUTER_API_KEY=your_openrouter_api_key_here
-            OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
-            LOG_LEVEL=1
-            EOF
-          fi
-          
-          # Останавливаем текущий процесс
+          echo "🛑 Останавливаем текущий процесс..."
           pm2 stop homework-bot || true
-          pm2 DELETE homework-bot || true
+          pm2 delete homework-bot || true
           
-          # Создаем временную директорию для архивов
-          mkdir -p /tmp/homework-bot-deploy
+          echo "📦 Извлекаем новый код..."
+          if [ -f homework-bot-simple.tar.gz ]; then
+            tar -xzf homework-bot-simple.tar.gz
+            rm homework-bot-simple.tar.gz
+          else
+            echo "❌ Архив не найден!"
+            exit 1
+          fi
           
-          # Переходим в временную директорию
-          cd /tmp/homework-bot-deploy
+          echo "📁 Настраиваем окружение..."
+          if [ ! -f .env ]; then
+            cp env.example .env
+            echo "⚠️ Создан .env файл - заполните токены!"
+          fi
           
-          # Создаем архив
-          tar -czf homework-bot-deploy.tar.gz -C /home/runner/work/homework-bot/homework-bot \
-            dist/ \
-            package*.json \
-            ecosystem.config.js \
-            DEPLOY_OPTIONS.md \
-            deploy.sh
-          
-          # Копируем архив на сервер
-          cp homework-bot-deploy.tar.gz /opt/homework-bot/
-          
-          # Переходим в рабочую директорию
-          cd /opt/homework-bot
-          
-          # Извлекаем новый код
-          tar -xzf homework-bot-deploy.tar.gz
-          
-          # Устанавливаем зависимости
+          echo "📦 Устанавливаем зависимости..."
           npm ci --production
           
-          # Запускаем с PM2
+          echo "🚀 Запускаем с PM2..."
           pm2 start ecosystem.config.js --env production
           
-          # Сохраняем конфигурацию PM2
+          echo "💾 Сохраняем конфигурацию PM2..."
           pm2 save
-          pm2 startup
           
-          # Показываем статус
+          echo "✅ Развертывание завершено!"
+          echo "📊 Статус PM2:"
           pm2 status
-          
-          # Очищаем временные файлы
-          rm -f homework-bot-deploy.tar.gz
+          echo "📋 Последние логи:"
+          pm2 logs homework-bot --lines 5
