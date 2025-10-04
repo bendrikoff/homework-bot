@@ -45,9 +45,12 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
         port: ${{ secrets.SERVER_PORT || 22 }}
+        key_path: ""
+        key: ""
         source: "homework-bot-deploy.tar.gz"
         target: "/opt/homework-bot/"
         strip_components: 0
+        timeout: 30s
        
     - name: 🖥️ Deploy with Docker
       uses: appleboy/ssh-action@v1.0.0
@@ -56,6 +59,9 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         password: ${{ secrets.SERVER_PASSWORD }}
         port: ${{ secrets.SERVER_PORT || 22 }}
+        key: ""
+        script_timeout: 300s
+        command_timeout: 60s
         script: |
           cd /opt/homework-bot
           
