@@ -1,0 +1,93 @@
+name: 🚀 Деплой Homework Bot (Прямое развертывание)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: 📦 Install dependencies
+      run: npm ci
+      
+    - name: 🔨 Build
+      run: npm run build
+      
+    - name: 📦 Create deployment archive
+      run: |
+        tar -czf homework-bot.tar.gz \
+          -C . \
+          dist/ \
+          package*.json \
+          ecosystem.config.js \
+          docker-compose.direct.yml \
+          Dockerfile \
+          DEPLOY_OPTIONS.md \
+          deploy.sh
+      
+    - name: 🖥️ Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          # Создаем директорию если не существует
+          mkdir -p /opt/homework-bot
+          cd /opt/homework-bot
+          
+          # Создаем временную директорию для архивов
+          mkdir -p /tmp/homework-bot-deploy
+          
+          # Переходим в временную директорию
+          cd /tmp/homework-bot-deploy
+          
+          # Создаем архив
+          tar -czf homework-bot-deploy.tar.gz -C /home/runner/work/homework-bot/homework-bot \
+            dist/ \
+            package*.json \
+            ecosystem.config.js \
+            docker-compose.direct.yml \
+            Dockerfile \
+            DEPLOY_OPTIONS.md \
+            deploy.sh
+          
+          # Копируем архив на сервер
+          cp homework-bot-deploy.tar.gz /opt/homework-bot/
+          
+          # Переходим в рабочую директорию
+          cd /opt/homework-bot
+          
+          # Останавливаем текущий контейнер
+          docker-compose down || true
+          
+          # Извлекаем новый код
+          tar -xzf homework-bot-deploy.tar.gz
+          
+          # Копируем docker-compose.yml
+          cp docker-compose.direct.yml docker-compose.yml
+          
+          # Перезапускаем контейнер
+          docker-compose build
+          docker-compose up -d
+          
+          # Очищаем старые образы
+          docker image prune -f
+          
+          # Показываем статус
+          docker-compose ps
+          
+          # Очищаем временные файлы
+          rm -f homework-bot-deploy.tar.gz

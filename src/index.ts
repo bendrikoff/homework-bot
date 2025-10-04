@@ -2,6 +2,7 @@ import { Telegraf, Context } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { LatexRenderer } from './latexRenderer';
 import { OpenRouterService } from './openRouterService';
+import { logger } from './logger';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -10,6 +11,7 @@ dotenv.config();
 
 // Проверяем наличие токена бота
 if (!process.env.BOT_TOKEN) {
+  logger.error('BOT_TOKEN не найден в переменных окружения!');
   console.error('❌ BOT_TOKEN не найден в переменных окружения!');
   console.log('Создайте файл .env и добавьте туда BOT_TOKEN=your_bot_token_here');
   process.exit(1);
@@ -17,6 +19,7 @@ if (!process.env.BOT_TOKEN) {
 
 // Проверяем наличие API ключа OpenRouter
 if (!process.env.OPENROUTER_API_KEY) {
+  logger.error('OPENROUTER_API_KEY не найден в переменных окружения!');
   console.error('❌ OPENROUTER_API_KEY не найден в переменных окружения!');
   console.log('Создайте файл .env и добавьте туда OPENROUTER_API_KEY=your_api_key_here');
   process.exit(1);
@@ -37,8 +40,15 @@ const openRouterService = new OpenRouterService(
 // Папка для временных изображений больше не нужна - отправляем напрямую в AI
 
 // Обработчик команды /start
-bot.start((ctx: Context) => {
-  const welcomeMessage = `
+bot.start(async (ctx: Context) => {
+  try {
+    const userId = ctx.from?.id?.toString();
+    const chatId = ctx.chat?.id?.toString();
+    const messageId = ctx.message?.message_id?.toString();
+    
+    await logger.info('Пользователь запустил бота командой /start', undefined, userId, chatId, messageId);
+    
+    const welcomeMessage = `
 🤖 Добро пожаловать в Homework Bot с AI!
 
 Доступные команды:
@@ -62,14 +72,25 @@ bot.start((ctx: Context) => {
 • Примеры: $\\frac{a}{b}$, $\\sqrt{x^2 + y^2}$, $\\sum_{i=1}^{n} i$
 
 Просто отправьте мне любое сообщение, и я отвечу с помощью AI! 😊
-  `;
-  
-  ctx.reply(welcomeMessage);
+    `;
+    
+    await ctx.reply(welcomeMessage);
+  } catch (error) {
+    await logger.logErrorSilently('Ошибка при обработке команды /start', error, ctx.from?.id?.toString(), ctx.chat?.id?.toString(), ctx.message?.message_id?.toString());
+    await ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
+  }
 });
 
 // Обработчик команды /help
-bot.help((ctx: Context) => {
-  const helpMessage = `
+bot.help(async (ctx: Context) => {
+  try {
+    const userId = ctx.from?.id?.toString();
+    const chatId = ctx.chat?.id?.toString();
+    const messageId = ctx.message?.message_id?.toString();
+    
+    await logger.info('Пользователь запросил справку командой /help', undefined, userId, chatId, messageId);
+    
+    const helpMessage = `
 📚 Справка по командам:
 
 /start - Начать работу с ботом
@@ -97,19 +118,40 @@ bot.help((ctx: Context) => {
   - $\\alpha + \\beta = \\gamma$ - греческие буквы
 
 💡 Совет: Отправьте мне любой вопрос, и я отвечу с помощью AI!
-  `;
-  
-  ctx.reply(helpMessage);
+    `;
+    
+    await ctx.reply(helpMessage);
+  } catch (error) {
+    await logger.logErrorSilently('Ошибка при обработке команды /help', error, ctx.from?.id?.toString(), ctx.chat?.id?.toString(), ctx.message?.message_id?.toString());
+    await ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
+  }
 });
 
 // Обработчик команды /ping
-bot.command('ping', (ctx: Context) => {
-  ctx.reply('🏓 Pong! Бот работает отлично!');
+bot.command('ping', async (ctx: Context) => {
+  try {
+    const userId = ctx.from?.id?.toString();
+    const chatId = ctx.chat?.id?.toString();
+    const messageId = ctx.message?.message_id?.toString();
+    
+    await logger.info('Пользователь проверил работу бота командой /ping', undefined, userId, chatId, messageId);
+    await ctx.reply('🏓 Pong! Бот работает отлично!');
+  } catch (error) {
+    await logger.logErrorSilently('Ошибка при обработке команды /ping', error, ctx.from?.id?.toString(), ctx.chat?.id?.toString(), ctx.message?.message_id?.toString());
+    await ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
+  }
 });
 
 // Обработчик команды /about
-bot.command('about', (ctx: Context) => {
-  const aboutMessage = `
+bot.command('about', async (ctx: Context) => {
+  try {
+    const userId = ctx.from?.id?.toString();
+    const chatId = ctx.chat?.id?.toString();
+    const messageId = ctx.message?.message_id?.toString();
+    
+    await logger.info('Пользователь запросил информацию о боте командой /about', undefined, userId, chatId, messageId);
+    
+    const aboutMessage = `
 🤖 Homework Bot v2.2.0 с нейросетью
 
 Создан с использованием:
@@ -121,22 +163,33 @@ bot.command('about', (ctx: Context) => {
 • Marked (для Markdown разметки)
 
 Этот бот поможет вам с домашними заданиями, отвечает на вопросы с помощью нейросети, анализирует фотографии задач и преобразует LaTeX формулы в изображения!
-  `;
-  
-  ctx.reply(aboutMessage);
+    `;
+    
+    await ctx.reply(aboutMessage);
+  } catch (error) {
+    await logger.logErrorSilently('Ошибка при обработке команды /about', error, ctx.from?.id?.toString(), ctx.chat?.id?.toString(), ctx.message?.message_id?.toString());
+    await ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
+  }
 });
 
 // Обработчик команды /latex
 bot.command('latex', async (ctx: Context) => {
-  const messageText = (ctx.message as any)?.text || '';
-  const latexFormula = messageText.replace('/latex', '').trim();
-  
-  if (!latexFormula) {
-    ctx.reply('❌ Пожалуйста, укажите LaTeX формулу после команды /latex\n\nПример: /latex \\frac{a}{b}');
-    return;
-  }
+  const userId = ctx.from?.id?.toString();
+  const chatId = ctx.chat?.id?.toString();
+  const messageId = ctx.message?.message_id?.toString();
   
   try {
+    const messageText = (ctx.message as any)?.text || '';
+    const latexFormula = messageText.replace('/latex', '').trim();
+    
+    if (!latexFormula) {
+      await logger.warn('Пользователь отправил команду /latex без формулы', undefined, userId, chatId, messageId);
+      await ctx.reply('❌ Пожалуйста, укажите LaTeX формулу после команды /latex\n\nПример: /latex \\frac{a}{b}');
+      return;
+    }
+    
+    await logger.logLatexProcessing(latexFormula, userId, chatId, messageId);
+    
     // Показываем сообщение о процессе
     const processingMessage = await ctx.reply('🔄 Обрабатываю LaTeX формулу...');
     
@@ -158,17 +211,20 @@ bot.command('latex', async (ctx: Context) => {
     // Очищаем временный файл
     latexRenderer.cleanup(imagePath);
     
+    await logger.info('LaTeX формула успешно обработана и отправлена', undefined, userId, chatId, messageId);
+    
   } catch (error) {
-    console.error('Ошибка при обработке LaTeX:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    ctx.reply(`❌ Ошибка при обработке LaTeX формулы:\n\`${errorMessage}\``, {
-      parse_mode: 'Markdown'
-    });
+    await logger.logErrorSilently('Ошибка при обработке LaTeX формулы', error, userId, chatId, messageId);
+    await ctx.reply('😔 Произошла ошибка при обработке LaTeX формулы. Попробуйте позже.');
   }
 });
 
 // Универсальный обработчик всех типов сообщений
 bot.on(['text', 'photo'], async (ctx: Context) => {
+  const userId = ctx.from?.id?.toString();
+  const chatId = ctx.chat?.id?.toString();
+  const messageId = ctx.message?.message_id?.toString();
+  
   try {
     const message = ctx.message as any;
     const userText = message.text || '';
@@ -179,8 +235,17 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
     const hasImage = photo && photo.length > 0;
     
     if (!hasText && !hasImage) {
+      await logger.warn('Получено пустое сообщение от пользователя', undefined, userId, chatId, messageId);
       await ctx.reply('❌ Не удалось получить сообщение или изображение');
       return;
+    }
+    
+    // Логируем сообщение пользователя
+    if (hasText) {
+      await logger.logUserMessage(userText, userId, chatId, messageId);
+    }
+    if (hasImage) {
+      await logger.logImageProcessing(`Изображение получено (${photo.length} вариантов)`, userId, chatId, messageId);
     }
     
     // Показываем индикатор "печатает"
@@ -210,6 +275,8 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
       const largestPhoto = photo[photo.length - 1];
       const fileId = largestPhoto.file_id;
       
+      await logger.info('Начинаю обработку изображения с AI', { fileId }, userId, chatId, messageId);
+      
       // Получаем файл от Telegram
       const fileLink = await ctx.telegram.getFileLink(fileId);
       const response = await fetch(fileLink);
@@ -232,13 +299,18 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
       );
     } else {
       // Только текстовое сообщение
+      await logger.info('Отправляю текстовое сообщение в AI', undefined, userId, chatId, messageId);
       aiResponse = await openRouterService.sendUserMessage(userText, systemPrompt);
     }
+    
+    // Логируем ответ AI
+    await logger.logAIResponse(aiResponse, userId, chatId, messageId);
     
     // Удаляем сообщение о процессе
     await ctx.deleteMessage(processingMessage.message_id);
     
     // Рендерим ответ AI в изображение с поддержкой Markdown + LaTeX
+    await logger.info('Начинаю рендеринг ответа AI в изображение', undefined, userId, chatId, messageId);
     const responseImagePath = await latexRenderer.renderMarkdownWithLatexToPng(aiResponse, {
       fontSize: 18,
       maxWidth: 1000,
@@ -281,9 +353,10 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
     // Очищаем временный файл ответа
     latexRenderer.cleanup(responseImagePath);
     
+    await logger.info('Ответ AI успешно отправлен пользователю', undefined, userId, chatId, messageId);
+    
   } catch (error) {
-    console.error('Ошибка при обработке сообщения:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    await logger.logErrorSilently('Ошибка при обработке сообщения пользователя', error, userId, chatId, messageId);
     
     // Если нейросеть недоступна, отправляем обычный ответ
     const fallbackResponses = [
@@ -299,9 +372,15 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
 
 // Обработчик кнопки "Объяснить решение"
 bot.action(/^explain_/, async (ctx: Context) => {
+  const userId = ctx.from?.id?.toString();
+  const chatId = ctx.chat?.id?.toString();
+  const messageId = ctx.callbackQuery?.message?.message_id?.toString();
+  
   try {
     // Сразу отвечаем на callback query, чтобы избежать timeout
     await ctx.answerCbQuery('🤖 Генерирую объяснение...');
+    
+    await logger.info('Пользователь запросил подробное объяснение', undefined, userId, chatId, messageId);
     
     // Показываем индикатор "печатает"
     await ctx.sendChatAction('typing');
@@ -315,6 +394,7 @@ bot.action(/^explain_/, async (ctx: Context) => {
     // Получаем сохраненные данные
     const userMessageData = (global as any).explainData?.[callbackData];
     if (!userMessageData) {
+      await logger.warn('Не удалось найти данные для объяснения', { callbackData }, userId, chatId, messageId);
       await ctx.reply('❌ Не удалось найти данные для объяснения');
       return;
     }
@@ -339,6 +419,8 @@ bot.action(/^explain_/, async (ctx: Context) => {
       // Если было изображение, анализируем его снова
       const fileId = userMessageData.imageData.fileId;
       
+      await logger.info('Генерирую подробное объяснение с анализом изображения', { fileId }, userId, chatId, messageId);
+      
       const fileLink = await ctx.telegram.getFileLink(fileId);
       const response = await fetch(fileLink);
       const imageBuffer = await response.arrayBuffer();
@@ -354,9 +436,13 @@ bot.action(/^explain_/, async (ctx: Context) => {
       );
     } else {
       // Если был только текст
+      await logger.info('Генерирую подробное объяснение для текстового сообщения', undefined, userId, chatId, messageId);
       const messageForAI = userMessageData.text || 'Объясни подробно решение этой задачи';
       explainResponse = await openRouterService.sendUserMessage(messageForAI, explainPrompt);
     }
+    
+    // Логируем ответ с объяснением
+    await logger.logAIResponse(`Подробное объяснение: ${explainResponse}`, userId, chatId, messageId);
     
     // Удаляем сообщение о процессе
     await ctx.deleteMessage(processingMessage.message_id);
@@ -380,39 +466,50 @@ bot.action(/^explain_/, async (ctx: Context) => {
     // Очищаем сохраненные данные
     delete (global as any).explainData[callbackData];
     
+    await logger.info('Подробное объяснение успешно отправлено', undefined, userId, chatId, messageId);
+    
   } catch (error) {
-    console.error('Ошибка при объяснении:', error);
+    await logger.logErrorSilently('Ошибка при генерации подробного объяснения', error, userId, chatId, messageId);
     await ctx.reply('❌ Произошла ошибка при генерации объяснения');
   }
 });
 
 // Обработчик ошибок
-bot.catch((err: any, ctx: Context) => {
-  console.error('Ошибка в боте:', err);
-  ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
+bot.catch(async (err: any, ctx: Context) => {
+  const userId = ctx.from?.id?.toString();
+  const chatId = ctx.chat?.id?.toString();
+  const messageId = ctx.message?.message_id?.toString();
+  
+  await logger.logErrorSilently('Необработанная ошибка в боте', err, userId, chatId, messageId);
+  await ctx.reply('😔 Произошла ошибка. Попробуйте позже.');
 });
 
 // Запуск бота
+logger.info('Запуск бота...');
 console.log('🚀 Запуск бота...');
 
 bot.launch()
-  .then(() => {
+  .then(async () => {
+    await logger.info('Бот успешно запущен!');
     console.log('✅ Бот успешно запущен!');
     console.log('📱 Бот готов к работе в Telegram');
   })
-  .catch((error) => {
+  .catch(async (error) => {
+    await logger.logErrorSilently('Ошибка при запуске бота', error);
     console.error('❌ Ошибка при запуске бота:', error);
     process.exit(1);
   });
 
 // Graceful stop
-process.once('SIGINT', () => {
+process.once('SIGINT', async () => {
+  await logger.info('Получен сигнал SIGINT, завершаю работу...');
   console.log('🛑 Получен сигнал SIGINT, завершаю работу...');
   latexRenderer.cleanupAll();
   bot.stop('SIGINT');
 });
 
-process.once('SIGTERM', () => {
+process.once('SIGTERM', async () => {
+  await logger.info('Получен сигнал SIGTERM, завершаю работу...');
   console.log('🛑 Получен сигнал SIGTERM, завершаю работу...');
   latexRenderer.cleanupAll();
   bot.stop('SIGTERM');

@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  homework-bot:
+    build: .
+    container_name: homework-bot-container
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - BOT_TOKEN=${BOT_TOKEN}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-meta-llama/llama-3.1-8b-instruct:free}
+      - LOG_LEVEL=${LOG_LEVEL:-1}
+      - LOG_DIR=/app/logs
+    volumes:
+      - ./temp:/app/temp
+      - ./logs:/app/logs
+    networks:
+      - homework-bot-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  homework-bot-network:
+    driver: bridge

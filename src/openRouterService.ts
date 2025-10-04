@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import FormData from 'form-data';
 import * as fs from 'fs';
+import { logger } from './logger';
 
 export interface OpenRouterMessage {
   role: 'user' | 'assistant' | 'system';
@@ -49,6 +50,13 @@ export class OpenRouterService {
     temperature: number = 0.7
   ): Promise<string> {
     try {
+      await logger.debug('Отправка запроса в OpenRouter API', {
+        model: this.model,
+        messageCount: messages.length,
+        maxTokens,
+        temperature
+      });
+      
       const response: AxiosResponse<OpenRouterResponse> = await axios.post(
         `${this.baseUrl}/chat/completions`,
         {
@@ -69,43 +77,67 @@ export class OpenRouterService {
       );
 
       if (response.data.choices && response.data.choices.length > 0) {
-        return response.data.choices[0].message.content;
+        const responseText = response.data.choices[0].message.content;
+        await logger.info('Успешно получен ответ от OpenRouter API', {
+          model: response.data.model,
+          usage: response.data.usage,
+          responseLength: responseText.length
+        });
+        return responseText;
       } else {
-        throw new Error('Пустой ответ от OpenRouter API');
+        const errorMsg = 'Пустой ответ от OpenRouter API';
+        await logger.error(errorMsg, response.data);
+        throw new Error(errorMsg);
       }
     } catch (error) {
-      console.error('Ошибка при отправке запроса в OpenRouter:', error);
+      await logger.logErrorSilently('Ошибка при отправке запроса в OpenRouter', error);
       
       if (axios.isAxiosError(error)) {
         if (error.response) {
           const status = error.response.status;
           const data = error.response.data;
-          throw new Error(`OpenRouter API ошибка ${status}: ${JSON.stringify(data)}`);
+          const errorMsg = `OpenRouter API ошибка ${status}: ${JSON.stringify(data)}`;
+          await logger.error(errorMsg, { status, data });
+          throw new Error(errorMsg);
         } else if (error.request) {
-          throw new Error('Нет ответа от OpenRouter API. Проверьте подключение к интернету.');
+          const errorMsg = 'Нет ответа от OpenRouter API. Проверьте подключение к интернету.';
+          await logger.error(errorMsg, error.request);
+          throw new Error(errorMsg);
         }
       }
       
-      throw new Error(`Неизвестная ошибка: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = `Неизвестная ошибка: ${error instanceof Error ? error.message : String(error)}`;
+      await logger.error(errorMsg, error);
+      throw new Error(errorMsg);
     }
   }
 
   async sendUserMessage(userMessage: string, systemPrompt?: string): Promise<string> {
-    const messages: OpenRouterMessage[] = [];
-    
-    if (systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: systemPrompt
+    try {
+      await logger.debug('Отправка пользовательского сообщения в OpenRouter', {
+        messageLength: userMessage.length,
+        hasSystemPrompt: !!systemPrompt
       });
-    }
-    
-    messages.push({
-      role: 'user',
-      content: userMessage
-    });
+      
+      const messages: OpenRouterMessage[] = [];
+      
+      if (systemPrompt) {
+        messages.push({
+          role: 'system',
+          content: systemPrompt
+        });
+      }
+      
+      messages.push({
+        role: 'user',
+        content: userMessage
+      });
 
-    return await this.sendMessage(messages);
+      return await this.sendMessage(messages);
+    } catch (error) {
+      await logger.logErrorSilently('Ошибка при отправке пользовательского сообщения', error);
+      throw error;
+    }
   }
 
   async sendMessageWithImage(
@@ -113,37 +145,48 @@ export class OpenRouterService {
     imagePath: string, 
     systemPrompt?: string
   ): Promise<string> {
-    const messages: OpenRouterMessage[] = [];
-    
-    if (systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: systemPrompt
+    try {
+      await logger.debug('Отправка сообщения с изображением в OpenRouter', {
+        messageLength: userMessage.length,
+        imagePath,
+        hasSystemPrompt: !!systemPrompt
       });
-    }
-    
-    // Читаем изображение и конвертируем в base64
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = imageBuffer.toString('base64');
-    const mimeType = this.getMimeType(imagePath);
-    
-    messages.push({
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: userMessage
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:${mimeType};base64,${base64Image}`
+      
+      const messages: OpenRouterMessage[] = [];
+      
+      if (systemPrompt) {
+        messages.push({
+          role: 'system',
+          content: systemPrompt
+        });
+      }
+      
+      // Читаем изображение и конвертируем в base64
+      const imageBuffer = fs.readFileSync(imagePath);
+      const base64Image = imageBuffer.toString('base64');
+      const mimeType = this.getMimeType(imagePath);
+      
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: userMessage
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:${mimeType};base64,${base64Image}`
+            }
           }
-        }
-      ]
-    });
+        ]
+      });
 
-    return await this.sendMessage(messages);
+      return await this.sendMessage(messages);
+    } catch (error) {
+      await logger.logErrorSilently('Ошибка при отправке сообщения с изображением', error);
+      throw error;
+    }
   }
 
   async sendMessageWithImageBuffer(
@@ -152,32 +195,44 @@ export class OpenRouterService {
     mimeType: string,
     systemPrompt?: string
   ): Promise<string> {
-    const messages: OpenRouterMessage[] = [];
-    
-    if (systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: systemPrompt
+    try {
+      await logger.debug('Отправка сообщения с изображением (buffer) в OpenRouter', {
+        messageLength: userMessage.length,
+        imageSize: base64Image.length,
+        mimeType,
+        hasSystemPrompt: !!systemPrompt
       });
-    }
-    
-    messages.push({
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: userMessage
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:${mimeType};base64,${base64Image}`
+      
+      const messages: OpenRouterMessage[] = [];
+      
+      if (systemPrompt) {
+        messages.push({
+          role: 'system',
+          content: systemPrompt
+        });
+      }
+      
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: userMessage
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:${mimeType};base64,${base64Image}`
+            }
           }
-        }
-      ]
-    });
+        ]
+      });
 
-    return await this.sendMessage(messages);
+      return await this.sendMessage(messages);
+    } catch (error) {
+      await logger.logErrorSilently('Ошибка при отправке сообщения с изображением (buffer)', error);
+      throw error;
+    }
   }
 
   private getMimeType(filePath: string): string {
@@ -200,15 +255,22 @@ export class OpenRouterService {
   // Метод для получения доступных моделей (опционально)
   async getAvailableModels(): Promise<any> {
     try {
+      await logger.debug('Запрос списка доступных моделей OpenRouter');
+      
       const response = await axios.get(`${this.baseUrl}/models`, {
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json'
         }
       });
+      
+      await logger.info('Список моделей OpenRouter успешно получен', {
+        modelCount: response.data?.data?.length || 0
+      });
+      
       return response.data;
     } catch (error) {
-      console.error('Ошибка при получении списка моделей:', error);
+      await logger.logErrorSilently('Ошибка при получении списка моделей OpenRouter', error);
       throw error;
     }
   }

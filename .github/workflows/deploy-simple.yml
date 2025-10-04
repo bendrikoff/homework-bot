@@ -1,0 +1,113 @@
+name: 🚀 Деплой Homework Bot (Простой)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: 📦 Install dependencies
+      run: npm ci
+      
+    - name: 🔨 Build
+      run: npm run build
+      
+    - name: 📦 Create deployment archive
+      run: |
+        tar -czf homework-bot.tar.gz \
+          -C . \
+          dist/ \
+          package*.json \
+          ecosystem.config.js \
+          DEPLOY_OPTIONS.md \
+          deploy.sh
+      
+    - name: 🖥️ Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+          # Проверяем наличие Node.js
+          if ! command -v node &> /dev/null; then
+            echo "📦 Устанавливаем Node.js..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            apt-get install -y nodejs
+          fi
+          
+          # Проверяем наличие PM2
+          if ! command -v pm2 &> /dev/null; then
+            echo "📦 Устанавливаем PM2..."
+            npm install -g pm2
+          fi
+          
+          # Создаем директорию если не существует
+          mkdir -p /opt/homework-bot
+          cd /opt/homework-bot
+          
+          # Создаем .env файл если не существует
+          if [ ! -f .env ]; then
+            cat > .env << EOF
+            BOT_TOKEN=your_bot_token_here
+            OPENROUTER_API_KEY=your_openrouter_api_key_here
+            OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
+            LOG_LEVEL=1
+            EOF
+          fi
+          
+          # Останавливаем текущий процесс
+          pm2 stop homework-bot || true
+          pm2 DELETE homework-bot || true
+          
+          # Создаем временную директорию для архивов
+          mkdir -p /tmp/homework-bot-deploy
+          
+          # Переходим в временную директорию
+          cd /tmp/homework-bot-deploy
+          
+          # Создаем архив
+          tar -czf homework-bot-deploy.tar.gz -C /home/runner/work/homework-bot/homework-bot \
+            dist/ \
+            package*.json \
+            ecosystem.config.js \
+            DEPLOY_OPTIONS.md \
+            deploy.sh
+          
+          # Копируем архив на сервер
+          cp homework-bot-deploy.tar.gz /opt/homework-bot/
+          
+          # Переходим в рабочую директорию
+          cd /opt/homework-bot
+          
+          # Извлекаем новый код
+          tar -xzf homework-bot-deploy.tar.gz
+          
+          # Устанавливаем зависимости
+          npm ci --production
+          
+          # Запускаем с PM2
+          pm2 start ecosystem.config.js --env production
+          
+          # Сохраняем конфигурацию PM2
+          pm2 save
+          pm2 startup
+          
+          # Показываем статус
+          pm2 status
+          
+          # Очищаем временные файлы
+          rm -f homework-bot-deploy.tar.gz
