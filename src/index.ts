@@ -2,6 +2,7 @@ import { Telegraf, Context } from 'telegraf';
 import * as dotenv from 'dotenv';
 import { LatexRenderer } from './latexRenderer';
 import { OpenRouterService } from './openRouterService';
+import { Analytics } from './analytics';
 import { logger } from './logger';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -37,6 +38,9 @@ const openRouterService = new OpenRouterService(
   process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free'
 );
 
+// Создаем экземпляр аналитики
+const analytics = new Analytics(process.env.YANDEX_METRIKA_ID || '');
+
 // Папка для временных изображений больше не нужна - отправляем напрямую в AI
 
 // Обработчик команды /start
@@ -47,6 +51,9 @@ bot.start(async (ctx: Context) => {
     const messageId = ctx.message?.message_id?.toString();
     
     await logger.info('Пользователь запустил бота командой /start', undefined, userId, chatId, messageId);
+    
+    // Отслеживаем событие запуска бота
+    await analytics.trackEvent('bot_start', userId);
     
     const welcomeMessage = `
 🤖 Добро пожаловать в Homework Bot с AI!
@@ -240,12 +247,14 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
       return;
     }
     
-    // Логируем сообщение пользователя
+    // Логируем сообщение пользователя и отправляем в аналитику
     if (hasText) {
       await logger.logUserMessage(userText, userId, chatId, messageId);
+      await analytics.trackEvent('message_sent', userId, { type: 'text', length: userText.length });
     }
     if (hasImage) {
       await logger.logImageProcessing(`Изображение получено (${photo.length} вариантов)`, userId, chatId, messageId);
+      await analytics.trackEvent('message_sent', userId, { type: 'image', variants: photo.length });
     }
     
     // Показываем индикатор "печатает"
@@ -302,8 +311,12 @@ bot.on(['text', 'photo'], async (ctx: Context) => {
       aiResponse = await openRouterService.sendUserMessage(userText, systemPrompt);
     }
     
-    // Логируем ответ AI
+    // Логируем ответ AI и отправляем в аналитику
     await logger.logAIResponse(aiResponse, userId, chatId, messageId);
+    await analytics.trackEvent('ai_response', userId, { 
+      hasImage: hasImage,
+      responseLength: aiResponse.length
+    });
     
     // Удаляем сообщение о процессе
     await ctx.deleteMessage(processingMessage.message_id);
@@ -440,8 +453,12 @@ bot.action(/^explain_/, async (ctx: Context) => {
       explainResponse = await openRouterService.sendUserMessage(messageForAI, explainPrompt);
     }
     
-    // Логируем ответ с объяснением
+    // Логируем ответ с объяснением и отправляем в аналитику
     await logger.logAIResponse(`Подробное объяснение: ${explainResponse}`, userId, chatId, messageId);
+    await analytics.trackEvent('explanation_generated', userId, {
+      hasImage: userMessageData.hasImage,
+      responseLength: explainResponse.length
+    });
     
     // Удаляем сообщение о процессе
     await ctx.deleteMessage(processingMessage.message_id);
