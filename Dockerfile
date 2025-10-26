@@ -1,24 +1,31 @@
 # Используем официальный Node.js образ
-FROM node:20-alpine
+FROM node:18-alpine
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем базовые зависимости
+# 1. Базовые пакеты и Chrome
 RUN apk add --no-cache \
-    ca-certificates \
-    ttf-freefont
-
-# Устанавливаем Chrome и связанные пакеты
-RUN apk add --no-cache \
+    nodejs \
+    npm \
+    python3 \
+    build-base \
     chromium \
-    nss
+    nss \
+    ca-certificates
 
-# Устанавливаем шрифты и рендеринг
+# 2. Минимальный набор для рендеринга
 RUN apk add --no-cache \
     freetype \
     freetype-dev \
-    harfbuzz
+    harfbuzz \
+    ttf-freefont \
+    libstdc++
+
+# 3. Добавляем edge репозиторий и устанавливаем LLVM15
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories && \
+    apk add --no-cache llvm15-libs@edge && \
+    rm -rf /var/cache/apk/*
 
 # Настраиваем Puppeteer для использования установленного Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
