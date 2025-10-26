@@ -4,15 +4,21 @@ FROM node:20-alpine
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Устанавливаем зависимости для сборки Puppeteer
+# Устанавливаем базовые зависимости
 RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
     ca-certificates \
     ttf-freefont
+
+# Устанавливаем Chrome и связанные пакеты
+RUN apk add --no-cache \
+    chromium \
+    nss
+
+# Устанавливаем шрифты и рендеринг
+RUN apk add --no-cache \
+    freetype \
+    freetype-dev \
+    harfbuzz
 
 # Настраиваем Puppeteer для использования установленного Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
