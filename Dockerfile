@@ -23,8 +23,8 @@ RUN apk add --no-cache \
     libstdc++
 
 # 3. Добавляем edge репозиторий и устанавливаем LLVM15
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories && \
-    apk add --no-cache llvm15-libs@edge && \
+RUN apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/main llvm15-libs || \
+    apk add --no-cache llvm-libs || true && \
     rm -rf /var/cache/apk/*
 
 # Настраиваем Puppeteer для использования установленного Chrome
