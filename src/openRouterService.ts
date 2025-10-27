@@ -1,7 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import FormData from 'form-data';
-import * as fs from 'fs';
-import { logger } from './loggerInstance';
+import * as fs from 'node:fs';
+import { logger } from './loggerInstance.js';
 
 export interface OpenRouterMessage {
   role: 'user' | 'assistant' | 'system';

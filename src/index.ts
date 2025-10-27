@@ -1,9 +1,9 @@
 import { Telegraf, Context } from 'telegraf';
 import * as dotenv from 'dotenv';
-import { LatexRenderer } from './latexRenderer';
-import { OpenRouterService } from './openRouterService';
-import { Analytics } from './analytics';
-import { logger } from './loggerInstance';
+import { LatexRenderer } from './latexRenderer.js';
+import { OpenRouterService } from './openRouterService.js';
+import { Analytics } from './analytics.js';
+import { logger } from './loggerInstance.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
