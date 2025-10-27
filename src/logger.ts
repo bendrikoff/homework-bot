@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -28,7 +28,11 @@ export class Logger {
   constructor(logLevel: LogLevel = LogLevel.INFO, logDir: string = 'logs') {
     this.logLevel = logLevel;
     // Используем переменную окружения LOG_DIR если установлена, иначе относительный путь
-    this.logDir = process.env.LOG_DIR ? process.env.LOG_DIR : path.join(__dirname, '..', logDir);
+    const moduleURL = new URL(import.meta.url);
+    const modulePath = path.dirname(moduleURL.pathname);
+    // Удаляем лишние слэши в начале пути для Windows
+    const cleanModulePath = modulePath.replace(/^\/([A-Z]:)/, '$1');
+    this.logDir = process.env.LOG_DIR ? process.env.LOG_DIR : path.join(cleanModulePath, '..', logDir);
     this.logFile = path.join(this.logDir, `bot_${this.getDateString()}.log`);
     
     // Создаем директорию для логов если её нет

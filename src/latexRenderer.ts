@@ -1,7 +1,7 @@
 import katex from 'katex';
 import htmlToImage from 'node-html-to-image';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
 
@@ -19,7 +19,11 @@ export class LatexRenderer {
   private tempDir: string;
 
   constructor() {
-    this.tempDir = path.join(__dirname, '../temp');
+    const moduleURL = new URL(import.meta.url);
+    const modulePath = path.dirname(moduleURL.pathname);
+    // Удаляем лишние слэши в начале пути для Windows
+    const cleanModulePath = modulePath.replace(/^\/([A-Z]:)/, '$1');
+    this.tempDir = path.join(cleanModulePath, '../temp');
     if (!fs.existsSync(this.tempDir)) {
       fs.mkdirSync(this.tempDir, { recursive: true });
     }

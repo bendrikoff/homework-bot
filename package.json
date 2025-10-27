@@ -2,12 +2,13 @@
   "name": "homework-bot",
   "version": "1.0.0",
   "description": "Telegram bot built with TypeScript and Telegraf",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "watch": "ts-node --watch src/index.ts"
+    "dev": "node --loader ts-node/esm --experimental-specifier-resolution=node src/index.ts",
+    "watch": "node --watch --loader ts-node/esm --experimental-specifier-resolution=node src/index.ts"
   },
   "keywords": [
     "telegram",

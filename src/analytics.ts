@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { logger } from './logger';
+import { logger } from './loggerInstance';
 
 export class Analytics {
     private counterId: string;

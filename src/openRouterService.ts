@@ -1,7 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import FormData from 'form-data';
 import * as fs from 'fs';
-import { logger } from './logger';
+import { logger } from './loggerInstance';
 
 export interface OpenRouterMessage {
   role: 'user' | 'assistant' | 'system';

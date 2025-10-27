@@ -3,9 +3,9 @@ import * as dotenv from 'dotenv';
 import { LatexRenderer } from './latexRenderer';
 import { OpenRouterService } from './openRouterService';
 import { Analytics } from './analytics';
-import { logger } from './logger';
-import * as fs from 'fs';
-import * as path from 'path';
+import { logger } from './loggerInstance';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // Загружаем переменные окружения
 dotenv.config();
