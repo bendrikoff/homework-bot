@@ -1,30 +1,10 @@
-# ---------- Stage 1: Build ----------
-FROM node:18-alpine AS builder
+# ---------- Runtime only (uses prebuilt dist) ----------
+FROM node:18-alpine
+
 WORKDIR /app
 
-# Чтобы Puppeteer не качал свой Chromium при установке
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-
-# Базовые инструменты для сборки нативных модулей
-RUN apk add --no-cache python3 make g++ git
-
-# Копируем конфигурационные файлы
-COPY package*.json tsconfig*.json ./
-
-# Устанавливаем все зависимости (включая dev) детерминированно
-RUN npm ci
-
-# Копируем исходники
-COPY src/ ./src/
-
-# Собираем проект
-RUN npm run build
-
-# ---------- Stage 2: Runtime ----------
-FROM node:18-alpine AS runtime
-WORKDIR /app
-
-# Пакеты для Chrome/Puppeteer на Alpine
+# Если используешь рендеринг/скриншоты (Puppeteer, Playwright и т.п.) — оставь блок ниже.
+# Если не нужно — можешь закомментировать apk add и переменные PUPPETEER_*.
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -34,36 +14,28 @@ RUN apk add --no-cache \
     ttf-freefont \
     libstdc++
 
-# Puppeteer будет использовать системный Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+ENV NODE_ENV=production \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    NODE_ENV=production
+    LOG_DIR=/app/logs
 
-# Сначала только манифесты — для кеша слоёв зависимостей
+# Копируем только манифесты — слой с зависимостями хорошо кешируется
 COPY package*.json ./
 
-# Ставим только прод-зависимости (современный эквивалент --only=production)
+# Ставим только прод-зависимости
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Копируем собранный код из builder
-# Если ты собираешь вне контейнера и уже копируешь dist в репо,
-# можно заменить на: COPY dist/ ./dist/
-COPY --from=builder /app/dist ./dist
+# Копируем собранный код и нужные файлы
+COPY dist ./dist
+COPY ecosystem.config.js ./ecosystem.config.js
 
-# Опционально: если есть статические файлы/конфиги — добавь их копирование:
-# COPY --from=builder /app/public ./public
-
-# Создаём непривилегированного пользователя
+# Подготовка директорий и непривилегированный пользователь
 RUN addgroup -g 1001 -S nodejs \
-    && adduser -S appuser -u 1001 \
-    && chown -R appuser:nodejs /app
+ && adduser -S appuser -u 1001 \
+ && mkdir -p /app/logs /app/temp \
+ && chown -R appuser:nodejs /app
 
-# Создаем директории для логов и временных файлов
-RUN mkdir -p /app/logs /app/temp \
-    && chown -R appuser:nodejs /app/logs /app/temp
-
-# Переключаемся на непривилегированного пользователя
 USER appuser
 
-# Команда запуска
+# Если в package.json есть "start": "node dist/index.js" — оставляем так
 CMD ["npm", "start"]
