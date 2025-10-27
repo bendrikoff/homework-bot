@@ -8,17 +8,16 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 # Базовые инструменты для сборки нативных модулей
 RUN apk add --no-cache python3 make g++ git
 
-# Максимальный кеш: сначала только манифесты
-COPY package*.json ./
+# Копируем конфигурационные файлы
+COPY package*.json tsconfig*.json ./
 
 # Устанавливаем все зависимости (включая dev) детерминированно
-# Если используешь workspaces/monorepo — добавь флаг --workspaces
 RUN npm ci
 
-# Копируем исходники и собираем
-# (если у тебя уже есть готовый dist снаружи — оставь COPY только dist)
-COPY . .
-# Если сборка не нужна — закомментируй следующую строку
+# Копируем исходники
+COPY src/ ./src/
+
+# Собираем проект
 RUN npm run build
 
 # ---------- Stage 2: Runtime ----------
@@ -56,5 +55,15 @@ COPY --from=builder /app/dist ./dist
 
 # Создаём непривилегированного пользователя
 RUN addgroup -g 1001 -S nodejs \
- && adduser -S appuser -u 1001 \
- && mkdir
+    && adduser -S appuser -u 1001 \
+    && chown -R appuser:nodejs /app
+
+# Создаем директории для логов и временных файлов
+RUN mkdir -p /app/logs /app/temp \
+    && chown -R appuser:nodejs /app/logs /app/temp
+
+# Переключаемся на непривилегированного пользователя
+USER appuser
+
+# Команда запуска
+CMD ["npm", "start"]
