@@ -24,14 +24,14 @@
     "form-data": "^4.0.4",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.22",
-  "marked": "^4.3.0",
+    "marked": "4.3.0",
     "mathjax-full": "^3.2.2",
     "node-html-to-image": "^5.0.0",
     "sharp": "^0.34.4",
     "telegraf": "^4.15.6"
   },
   "devDependencies": {
-    "@types/marked": "^4.3.2",
+    "@types/marked": "4.3.2",
     "@types/node": "^20.10.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
